@@ -13,6 +13,7 @@ then
     export CCURL_CACHE_TIMEOUT=31536000  # one year
 fi
 
+
 function ccurl()
 {
     local _c _r _z
@@ -34,13 +35,42 @@ function ccurl()
 
     if [[ -f $cache ]]
     then
-        local now="$(date '+%s')"
-        local st_mtime=$now
-        eval "$(stat -s "$cache" | awk '{print $10}')"
-        local age=$(( $now - $st_mtime ))
-        if [[ $age -ge $CCURL_CACHE_TIMEOUT ]]
+        if [[ "$CCURL_CACHE_TIMEOUT" =~ ^[0-9]+$ ]]
         then
-            rm -f "$cache"
+            local now="$(date '+%s')"
+            local st_mtime=$now
+            eval "$(stat -s "$cache" | awk '{print $10}')"
+            local age=$(( $now - $st_mtime ))
+            if [[ $age -ge $CCURL_CACHE_TIMEOUT ]]
+            then
+                rm -f "$cache"
+            fi
+        elif [[ "$CCURL_CACHE_TIMEOUT" == "auto" ]]
+        then
+            local url="$(grep -m 1 '^curl[ ]' "$cache" |
+                         sed 's|^.*[ ]\([a-z]*://[^ ]*\).*$|\1|'
+                        )"
+            if [[ -n $url ]]
+            then
+                local fresh_headers="$CCURL_CACHE/$$.headers"
+                if $CURL -L "$url" -D "$fresh_headers" -I >/dev/null 2>&1
+                then
+                    for header in 'etag' 'last-modifed'
+                    do
+                        local value="$(grep -m 1 "^${header}:" "$cache")"
+                        if ! grep -q "^${value}" "$fresh_headers"
+                        then
+                            rm -f "$cache"
+                            break
+                        fi
+                    done
+                else
+                    rm -f "$cache"
+                fi
+                rm -f "$fresh_headers"
+            else
+                rm -f "$cache"
+            fi
         fi
     fi
 
@@ -55,11 +85,14 @@ function ccurl()
         then
             echo "curl $@" > "$cache"
             cat "${cache}.headers" | $D2U >> "$cache"
-            local line_n="$((2 + $(wc -l "$cache" | awk '{print $1}')))"
-            local content_n="$(wc -l "${cache}.tmp" | awk '{print $1}')"
-            echo "RANGE:${line_n},$(( $line_n + $content_n ))" >> "$cache"
-            cat "${cache}.tmp" >> "$cache"
-            rm -f "${cache}.tmp"
+            if [[ -f "${cache}.tmp" ]]
+            then
+                local line_n="$((2 + $(wc -l "$cache" | awk '{print $1}')))"
+                local content_n="$(wc -l "${cache}.tmp" | awk '{print $1}')"
+                echo "RANGE:${line_n},$(( $line_n + $content_n ))" >> "$cache"
+                cat "${cache}.tmp" >> "$cache"
+                rm -f "${cache}.tmp"
+            fi
             echo -e "${_c}created: $cache${_z}"
 
         elif [[ -s "${cache}.headers" ]]
@@ -84,5 +117,6 @@ function ccurl()
 
     return 0
 }
+
 
 if [[ $(caller | awk '{print $1}') -eq 0 ]]; then ccurl "$@"; fi
