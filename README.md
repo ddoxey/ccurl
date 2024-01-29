@@ -34,3 +34,4 @@ export CCACHE_CACHE_TIMEOUT=31536000  # 1 year default
 ```
 `ccurl` will attempt to create the `$CCACHE_CACHE` directory if it doesn't exist.
 When cached content reaches `$CCACHE_CACHE_TIMEOUT` seconds old it will be overwritten with fresh content on the next call.
+If `$CCACHE_CACHE_TIMEOUT` is set to "auto" then a fresh set of headers is fetched and the `etag` and `last-modified` headers are compared with cache and the cache will be cleared if there is a mismatch.
