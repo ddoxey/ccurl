@@ -38,8 +38,15 @@ function ccurl()
         if [[ "$CCURL_CACHE_TIMEOUT" =~ ^[0-9]+$ ]]
         then
             local now="$(date '+%s')"
-            local st_mtime=$now
-            eval "$(stat -s "$cache" | awk '{print $10}')"
+            local st_mtime="$(ls -l --time-style=+%s "$cache" 2>/dev/null | awk '{print $6}')"
+            if [[ -z $st_mtime ]]
+            then
+                eval "$(stat -s "$cache" 2>/dev/null | awk '{print $10}')"
+            fi
+            if [[ -z $st_mtime ]]
+            then
+                st_mtime=$now
+            fi
             local age=$(( $now - $st_mtime ))
             if [[ $age -ge $CCURL_CACHE_TIMEOUT ]]
             then
